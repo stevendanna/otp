@@ -257,14 +257,6 @@ void run(EpmdVars *g)
       char *tmp = NULL;
       char *token = NULL;
 
-      /* Always listen on the loopback. */
-      SET_ADDR(iserv_addr[num_sockets],htonl(INADDR_LOOPBACK),sport);
-      num_sockets++;
-#if defined(EPMD6)
-      SET_ADDR6(iserv_addr[num_sockets],in6addr_loopback,sport);
-      num_sockets++;
-#endif
-
 	  if ((tmp = strdup(g->addresses)) == NULL)
 	{
 	  dbg_perror(g,"cannot allocate memory");
@@ -278,7 +270,6 @@ void run(EpmdVars *g)
 	  struct in_addr addr;
 #if defined(EPMD6)
 	  struct in6_addr addr6;
-	  struct sockaddr_storage *sa = &iserv_addr[num_sockets];
 
 	  if (inet_pton(AF_INET6,token,&addr6) == 1)
 	    {
@@ -300,15 +291,6 @@ void run(EpmdVars *g)
 	      dbg_tty_printf(g,0,"cannot parse IP address \"%s\"",token);
 	      epmd_cleanup_exit(g,1);
 	    }
-
-#if defined(EPMD6)
-	  if (sa->ss_family == AF_INET6 && IN6_IS_ADDR_LOOPBACK(&addr6))
-	      continue;
-
-	  if (sa->ss_family == AF_INET)
-#endif
-	  if (IS_ADDR_LOOPBACK(addr))
-	    continue;
 
 	  num_sockets++;
 
@@ -374,13 +356,24 @@ void run(EpmdVars *g)
 	  switch (errno) {
 	      case EAFNOSUPPORT:
 	      case EPROTONOSUPPORT:
+                  /*
+                   * Log error but continue. We can get here for
+                   * in6addr_any on machines that don't have IPv6
+                   * support. If we can't bind any addresses, we'll
+                   * exit further down
+                   *
+                   */
+                  dbg_perror(g,"error opening stream socket");
 	          continue;
 	      default:
 	          dbg_perror(g,"error opening stream socket");
 	          epmd_cleanup_exit(g,1);
 	  }
 	}
-      g->listenfd[bound++] = listensock[i];
+      else
+        {
+          g->listenfd[bound++] = listensock[i];
+        }
 
 #if HAVE_DECL_IPV6_V6ONLY
       opt = 1;
